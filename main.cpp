@@ -7,14 +7,13 @@ int main()
     try
     {
         parser.pickleOpener();
+        parser.setParsers();
+        parser.parsePickle();
     }
     catch(const std::exception& e)
     {
         fprintf(stderr, "%s\n", e.what());
     }
-    
-    parser.setParsers();
-    parser.parsePickle();
 
     return 0;
 }
