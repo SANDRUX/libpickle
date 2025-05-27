@@ -48,51 +48,56 @@ void PickleParser::parsePickle()
 {
     for (size_t i = 2; i < size;)
     {
-        auto it = parserMap.find(buff[i]);
-        if (it != parserMap.end())
-        {
-            i += it->second((buff.data() + i));
-            continue;
-        }
-        else 
-        {
-            std::printf("Unknown opcode: %2x\n", buff[i]);
-            i++;
-            continue;
-        }
-        if (buff[i] == 0x2e)
+        uint8_t opcode = buff[i];
+        if (opcode == 0x2e)
         {
             std::printf("THE END\n");
             break;
         }
-        i++;
+
+        auto it = parserMap.find(opcode);
+        if (it != parserMap.end())
+        {   
+            IValue* pValuePtr;
+            size_t consumed = it->second(buff.data() + i + 1, &pValuePtr);
+            delete pValuePtr;
+            i += consumed + 1;
+        }
+        else 
+        {
+            std::printf("Unknown opcode: %02x at position %zu\n", opcode, i);
+            i += 1; // Skip unknown opcode
+        }
     }
 }
 
-size_t readBININT1(const char* data)
+
+size_t readBININT1(const char* data, IValue** value)
 {
-    std::printf("BININT1: %d\n", static_cast<uint8_t>(*data));
+    *value = new BININT1;
+    dynamic_cast<BININT1*>(*value)->value = static_cast<uint8_t>(*data); 
+    // std::printf("BININT1: %d\n", static_cast<uint8_t>(*data));
     return 1;
 }
 
-size_t readBININT2(const char* data)
+size_t readBININT2(const char* data, IValue** value)
 {
-    uint16_t value = (static_cast<uint8_t>(*data)) | (static_cast<uint8_t>(*(data + 1)) << 8);
-
-    std::printf("BININT2: %d\n", value);
+    *value = new BININT2;
+    dynamic_cast<BININT2*>(*value)->value = (static_cast<uint8_t>(*data)) | (static_cast<uint8_t>(*(data + 1)) << 8); 
+    // std::printf("BININT2: %d\n", value);
     return 2;
 }
 
-size_t readBININT(const char* data)
+size_t readBININT(const char* data, IValue** value)
 {
-    int32_t value = (static_cast<uint8_t>(*data)) | (static_cast<uint8_t>(*(data + 1)) << 8) |
+    *value = new BININT;
+    dynamic_cast<BININT*>(*value)->value = (static_cast<uint8_t>(*data)) | (static_cast<uint8_t>(*(data + 1)) << 8) |
     (static_cast<uint8_t>(*(data + 2)) << 16) | (static_cast<uint8_t>(*(data + 3)) << 24);
-    
-    std::printf("BININT: %d\n", value);
+    // std::printf("BININT: %d\n", value);
     return 4;
 }
 
-size_t readLONG(const char* data)
+size_t readLONG(const char* data, IValue** value)
 {
     std::string numString;
     int index = 0;
@@ -104,13 +109,14 @@ size_t readLONG(const char* data)
     }
     ++index;
 
-    long long value = std::stoll(numString);
-    std::printf("LONG: %lld\n", value);
+    *value = new LONG;
+    dynamic_cast<LONG*>(*value)->value = std::stoll(numString);
+    // std::printf("LONG: %lld\n", value);
 
     return index;
 }
 
-size_t readLONG1(const char* data)
+size_t readLONG1(const char* data, IValue** value)
 {
     uint8_t length = static_cast<uint8_t>(*data); 
     const uint8_t* bytes = reinterpret_cast<const uint8_t*>(data + 1);
@@ -141,12 +147,14 @@ size_t readLONG1(const char* data)
         }
     }
 
-    std::printf("LONG1: %ld\n", result);
+    // std::printf("LONG1: %ld\n", result);
+    *value = new LONG1;
+    dynamic_cast<LONG1*>(*value)->value = result;
 
     return length + 1;
 }
 
-size_t readLONG4(const char* data)
+size_t readLONG4(const char* data, IValue** value)
 {
     uint32_t length = 
         static_cast<uint8_t>(data[0]) |
@@ -179,12 +187,14 @@ size_t readLONG4(const char* data)
         }
     }
 
-    std::printf("LONG4: %ld\n", result);
+    // std::printf("LONG4: %ld\n", result);
+    *value = new LONG4;
+    dynamic_cast<LONG4*>(*value)->value = result;
 
     return length + 4;
 }
 
-size_t readBINSTRING(const char* data)
+size_t readBINSTRING(const char* data, IValue** value)
 {
     uint32_t length = static_cast<uint8_t>(data[1]) |
                     (static_cast<uint8_t>(data[2]) << 8) |
@@ -193,43 +203,50 @@ size_t readBINSTRING(const char* data)
 
     std::string result(data + 4, data + 4 + length);
 
-    std::printf("BINSTRING: \"%s\"\n", result.c_str());
+    *value = new BINSTRING;
+    dynamic_cast<BINSTRING*>(*value)->value = result;
+
+    // std::printf("BINSTRING: \"%s\"\n", result.c_str());
 
     return length + 4;
 }
 
-size_t readBINBYTES(const char* data)
+size_t readBINBYTES(const char* data, IValue** value)
 {
     uint32_t length = static_cast<uint8_t>(data[1]) |
                       (static_cast<uint8_t>(data[2]) << 8) |
                       (static_cast<uint8_t>(data[3]) << 16) |
                       (static_cast<uint8_t>(data[4]) << 24);
 
-    std::printf("BINBYTES: ");
+    // std::printf("BINBYTES: ");
+    *value = new BINBYTES;
     for (size_t i = 0; i < length; i++)
     {
-        std::printf("%02X ", data[i + 4]);
+        dynamic_cast<BINBYTES*>(*value)->value.push_back(data[i + 4]);
+        // std::printf("%02X ", data[i + 4]);
     }
-    std::printf("\n");
+    // std::printf("\n");
 
     return length + 4;
 }
 
-size_t readSHORTBINBYTES(const char* data)
+size_t readSHORTBINBYTES(const char* data, IValue** value)
 {
     uint8_t length = static_cast<uint8_t>(data[0]);
 
-    std::printf("SHORT_BINBYTES: ");
+    // std::printf("SHORT_BINBYTES: ");
+    *value = new SHORTBINBYTES;
     for (size_t i = 0; i < length; i++)
     {
-        std::printf("%02X ", data[i + 4]);
+        // std::printf("%02X ", data[i + 4]);
+        dynamic_cast<SHORTBINBYTES*>(*value)->value.push_back(data[i + 4]);
     }
-    std::printf("\n");
+    // std::printf("\n");
 
     return length + 1;
 }
 
-size_t readBINUNICODE(const char* data)
+size_t readBINUNICODE(const char* data, IValue** value)
 {
     uint32_t length = static_cast<uint8_t>(data[0]) |
                       (static_cast<uint8_t>(data[1]) << 8) |
@@ -238,12 +255,14 @@ size_t readBINUNICODE(const char* data)
 
     std::string utf8str(data + 4, data + 4 + length);
 
-    std::printf("BINUNICODE: %s\n", utf8str.c_str());
+    // std::printf("BINUNICODE: %s\n", utf8str.c_str());
+    *value = new BINUNICODE;
+    dynamic_cast<BINUNICODE*>(*value)->value = utf8str;
 
     return length + 4;
 }
 
-size_t readBINUNICODE8(const char* data)
+size_t readBINUNICODE8(const char* data, IValue** value)
 {
     uint64_t length = 0;
     for (int i = 0; i < 8; ++i) 
@@ -252,18 +271,23 @@ size_t readBINUNICODE8(const char* data)
     }
 
     std::string utf8str(data + 8, data + 8 + length);
+    *value = new BINUNICODE8;
+    dynamic_cast<BINUNICODE8*>(*value)->value = utf8str;
 
-    std::printf("BINUNICODE8: %s\n", utf8str.c_str());
+    // std::printf("BINUNICODE8: %s\n", utf8str.c_str());
 
     return length + 8;
 }
 
-size_t readSHORTBINUNICODE(const char* data)
+size_t readSHORTBINUNICODE(const char* data, IValue** value)
 {
     uint8_t length = static_cast<uint8_t>(data[0]);
     std::string utf8str(data + 1, data + 1 + length);
 
-    std::printf("SHORT_BINUNICODE: %s\n", utf8str.c_str());
+    *value = new SHORTBINUNICODE;
+    dynamic_cast<SHORTBINUNICODE*>(*value)->value = utf8str;
+
+    // std::printf("SHORT_BINUNICODE: %s\n", utf8str.c_str());
 
     return length + 1;
 }
