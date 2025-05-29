@@ -1,19 +1,15 @@
 #include "pickle.hpp"
+#include <iostream>
 
-int main()
-{   
-    PickleParser parser("archive/data.pkl");
-
-    try
-    {
+int main() {
+    try {
+        PickleParser parser("archive/data.pkl");
         parser.pickleOpener();
         parser.setParsers();
         parser.parsePickle();
+    } catch (const std::exception& e) {
+        std::cerr << "Error: " << e.what() << std::endl;
+        return 1;
     }
-    catch(const std::exception& e)
-    {
-        fprintf(stderr, "%s\n", e.what());
-    }
-
     return 0;
 }
